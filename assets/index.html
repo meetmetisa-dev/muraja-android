@@ -1,12 +1,12 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'"><title>Muraja</title><link rel="stylesheet" href="style.css"></head><body>
-<header><span class="logo">◈</span> Muraja</header>
-<main><nav aria-label="Sections"><button id="practiceTab">Practice</button><button id="progressTab">Progress</button></nav>
-<section id="practice"><h1>Recitation practice</h1>
-<div class="selectors"><label>Surah<select id="surah"></select></label><label>Ayah<select id="ayah"></select></label></div>
-<article><div class="cardhead"><span id="ref"></span><button id="hide"></button></div><div id="verse" dir="rtl" lang="ar"></div><p id="veil"></p><button id="hint">Reveal one word</button></article>
-<button class="primary" id="recite">Recite &amp; compare</button><p class="note">Uses your phone’s Arabic speech service, which may process audio online. Feedback compares words only.</p>
-<div id="result" aria-live="polite" hidden></div>
-<div class="controls"><button id="prev">← Previous</button><button id="next">Next →</button></div><button class="save" id="complete"></button></section>
-<section id="progress" hidden><h1>Your progress</h1><article><div class="cardhead">Ayahs marked practiced</div><strong id="total"></strong><div id="bar"><i></i></div></article><div id="records"></div></section>
-<footer>Uthmani Quran text · QuranEnc via quran-json 3.1.2<br>Risan Bagja Pradana · CC BY-SA 4.0</footer>
-</main><script src="match.js"></script><script src="app.js"></script></body></html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'"><title>Muraja Voice</title><link rel="stylesheet" href="style.css"></head><body>
+<header><b>◈ &nbsp;Muraja</b><span>by Tisa</span></header>
+<main>
+<nav aria-label="Sections"><button id="practiceTab">Practice</button><button id="progressTab">Progress</button></nav>
+<section id="practice"><div class="tools"><label>Surah<select id="surah"></select></label><label>Page<select id="page"></select></label></div>
+<article aria-label="Memorization page"><div class="folio"><span id="range"></span><span id="folio"></span></div><div id="sheet" dir="rtl" lang="ar"></div></article>
+<div class="turn"><button id="prev">← Previous page</button><button id="next">Next page →</button></div>
+<p id="target"></p><button class="primary" id="recite"></button><p id="result" role="status"></p>
+</section>
+<section id="progress" hidden><h1>Your progress</h1><p id="total"></p><div id="records"></div></section>
+<footer><details><summary>About Muraja</summary><p>App by Tisa. Arabic recognition uses the phone’s speech service and may require internet. The checker compares recognized words in order. Pronunciation and tajwid require separate assessment.</p><p>Uthmani text from the Noble Qur’an Encyclopedia via quran-json 3.1.2, Risan Bagja Pradana (CC BY-SA 4.0). Page boundaries derived from Tanzil.info Quran metadata 1.0 (CC BY).</p></details></footer>
+</main><script src="pages.js"></script><script src="match.js"></script><script src="app.js"></script></body></html>
