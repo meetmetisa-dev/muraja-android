@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const nodes = {}, storage = new Map();
-class Element { setAttribute() {} append() {} appendChild() {} scrollIntoView() {} add() {} }
+class Element { getContext(){return null;} setAttribute() {} append() {} appendChild() {} scrollIntoView() {} add() {} }
 const context = vm.createContext({
   assert, window:{}, document:{
     body:{classList:{remove(){},add(){}}}, getElementById:id=>nodes[id] ||= new Element(),
@@ -11,7 +11,7 @@ const context = vm.createContext({
   localStorage:{getItem:k=>storage.get(k), setItem:(k,v)=>storage.set(k,String(v))},
   Option:Element, Practice:{chapters:()=>fs.readFileSync('assets/quran.json','utf8'),cancel(){},listen(){},finish(){}}
 });
-for(const file of ['spellings','pages','match','app','garden']){
+for(const file of ['spellings','pages','match','app','garden','atlas']){
   vm.runInContext(fs.readFileSync('assets/'+file+'.js','utf8'),context);
 }
 vm.runInContext(`
@@ -62,7 +62,7 @@ assert.equal(el('harvest').hidden,false);
 console.log('Passed overlap, alternative transcript, split word group and 6,236 consecutive ayah callbacks.');
 
 vm.runInContext(`
-checked.clear();gardenMap();selectGarden(chapters[0]);el('beginQuest').onclick();el('recite').onclick();
+checked.clear();el('region').value=0;gardenMap();selectGarden(chapters[0]);el('beginQuest').onclick();el('recite').onclick();
 window.voiceEvent(pending,'partial',verses[0].text);assert.equal(gardenState(chapters[0]).matched,0);
 window.voiceEvent(pending,'final','خطأ');assert.equal(gardenState(chapters[0]).matched,0);
 window.voiceEvent(pending,'final',verses.slice(0,7).map(v=>v.text).join(' '));
@@ -82,11 +82,27 @@ for(const pace of [60,30,10]){
 assert(entireQuranDone());checked.delete('114:5');assert(!entireQuranDone());
 checked.delete('1:7');el('region').value=0;gardenMap();selectGarden(chapters[0]);
 el('beginQuest').onclick();el('recite').onclick();window.voiceEvent(pending,'final',verses[6].text);
-assert.equal(el('travel').hidden,false);el('travel').onclick();assert.equal(Number(el('region').value),11);
+assert.equal(el('travel').hidden,false);el('travel').onclick();assert.equal(Number(el('region').value),29);
 el('beginQuest').onclick();el('recite').onclick();window.voiceEvent(pending,'final',verses[verses.length-2].text);
 assert.equal(el('harvest').hidden,false);
 el('pace').value='60';el('pace').onchange();el('reviewStart').onclick();assert(quest.review);
-el('recite').onclick();window.voiceEvent(pending,'final',verses[0].text);
+window.voiceEvent(pending,'final',verses[0].text);
 assert.equal(localStorage.getItem('reviewCursor.60'),'1');
 `,context);
 console.log('Travel, full completion and three review cycles passed.');
+
+vm.runInContext(`
+checked.clear();localStorage.setItem('reviewSession.30',0);localStorage.setItem('reviewCursor.30',-1);
+openPage(0,true);openPlanner();el('pace').value='30';el('pace').onchange();el('reviewStart').onclick();
+assert(quest.review && pending);assert.equal(verses[cursor].ref,'1:1');
+el('surah').onchange({target:{value:'2'}});el('ayah').onchange({target:{value:'51'}});
+assert.equal(verses[cursor].ref,'2:51');assert.equal(pending,null);
+el('recite').onclick();window.voiceEvent(pending,'final',verses[cursor].text);assert.equal(verses[cursor].ref,'2:52');
+openPlanner();el('planFromHere').onclick();el('reviewStart').onclick();assert.equal(verses[cursor].ref,'2:52');assert(pending);
+for(let i=0;i<30;i++){
+ openPlanner();selectIsland(i);el('atlasPractice').onclick();
+ assert.equal(cursor,juzStarts[i]);assert.equal(quest.end,juzStarts[i+1]||verses.length);assert(pending);
+}
+el('surah').onchange({target:{value:'114'}});el('ayah').onchange({target:{value:'6'}});assert.equal(cursor,6235);
+`,context);
+console.log('First-use planning, arbitrary ayah starts, and all 30 playable map regions passed.');

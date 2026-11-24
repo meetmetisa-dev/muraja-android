@@ -26,7 +26,15 @@ function node(tag, text, cls) {
 function drawPage() {
   const first=verses[pageStarts[page]], last=verses[end-1];
   el('page').value=page;
-  el('surah').value=cursor<end ? verses[cursor].chapter.id : last.chapter.id;
+  const current=cursor<end ? verses[cursor] : last;
+  el('surah').value=current.chapter.id;
+  const picker=el('ayah');
+  if(picker.chapterId!==current.chapter.id){
+    picker.textContent='';
+    for(const v of current.chapter.verses) picker.add(new Option(v.id,v.id));
+    picker.chapterId=current.chapter.id;
+  }
+  picker.value=current.number;
   el('range').textContent=first.chapter.transliteration+' · '+first.ref+' – '+last.ref;
   el('folio').textContent='Page '+(page+1);
   const sheet=el('sheet'); sheet.textContent='';
@@ -40,7 +48,7 @@ function drawPage() {
         blank.setAttribute('aria-hidden','true'); sheet.append(blank,' ');
       }
     }
-    sheet.append(node('span','﴿'+digits(v.number)+'﴾','marker'),' ');
+    sheet.append(node('span','﴿'+digits(v.number)+'﴾',i===cursor?'marker current':'marker'),' ');
   }
   el('prev').disabled=page===0; el('next').disabled=page===603;
   el('target').textContent=cursor===end?'Page complete': 'Recite '+verses[cursor].chapter.transliteration+' · ayah '+verses[cursor].number;
@@ -94,16 +102,24 @@ window.voiceEvent=(key,type,value)=>{
       const matched=verses[cursor++];
       if(!checked.has(matched.ref)){
         checked.add(matched.ref);
-        newlyCompleted.add(Math.floor((matched.chapter.id-1)/10));
+        newlyCompleted.add(juzFor(cursor-1));
       }
       localStorage.setItem('pageCursor.'+page,cursor);
     }
     localStorage.setItem('checkedAyahs',JSON.stringify([...checked]));
     fragment=scan.mismatch?'':scan.tail;preview=null;
     if(quest && quest.review) localStorage.setItem('reviewCursor.'+quest.pace,cursor);
-    const transition=(quest || checked.size===verses.length) && journeyTransition(newlyCompleted);
+    if(quest?.atlas!==undefined){
+      localStorage.setItem('atlasCursor.'+quest.atlas,cursor);
+      if(cursor===quest.end){
+        const j=quest.atlas;
+        if(journeyTransition(newlyCompleted)){gardenMap();return;}
+        openPlanner();el('atlasInfo').textContent+=' · Recitation complete.';return;
+      }
+    }
+    const transition=(!quest?.review && quest?.atlas===undefined && (quest || checked.size===verses.length)) && journeyTransition(newlyCompleted);
     if(quest && quest.review && cursor===quest.end){
-      completeAssignment(quest);gardenMap();return;
+      completeAssignment(quest);if(checked.size===verses.length && newlyCompleted.size){gardenMap();}else{openPlanner();}return;
     }
     if(transition){
       gardenMap();return;
@@ -137,7 +153,7 @@ window.voiceEvent=(key,type,value)=>{
   if(cursor===verses.length && type==='final'){cancelCapture();drawPage();el('result').textContent='Recitation complete.';}
 };
 function section(practice){
-  quest=null;el('adventure').hidden=true;el('gardenTab').setAttribute('aria-pressed',false);
+  quest=null;el('planner').hidden=true;el('planTab').setAttribute('aria-pressed',false);el('adventure').hidden=true;el('gardenTab').setAttribute('aria-pressed',false);
   cancelCapture();drawPage();el('practice').hidden=!practice;el('progress').hidden=practice;
   el('practiceTab').setAttribute('aria-pressed',practice);el('progressTab').setAttribute('aria-pressed',!practice);
   if(practice) return;
@@ -152,6 +168,10 @@ function section(practice){
 chapters.forEach(c=>el('surah').add(new Option(c.id+'. '+c.transliteration,c.id)));
 pageStarts.forEach((_,i)=>el('page').add(new Option(i+1,i)));
 el('surah').onchange=e=>{const index=verses.findIndex(v=>v.chapter.id===Number(e.target.value));openPage(pageFor(index),false,index);};
+el('ayah').onchange=e=>{
+  const index=verses.findIndex(v=>v.chapter.id===Number(el('surah').value) && v.number===Number(e.target.value));
+  if(index>=0)openPage(pageFor(index),false,index);
+};
 el('page').onchange=e=>openPage(Number(e.target.value));
 el('prev').onclick=()=>openPage(page-1);el('next').onclick=()=>openPage(page+1);
 el('recite').onclick=()=>{
