@@ -14,7 +14,7 @@ let page = Number(localStorage.getItem('mushafPage') || pageFor(Math.max(0,oldIn
 if (!Number.isInteger(page) || page<0 || page>=604) page=0;
 let quest=null;
 let cursor, end, sequence=0, pending=null;
-let feedback='', lastHeard='';
+let feedback='', lastHeard='', mistake=null;
 let origin, preview=null, fragment="", finishing=false;
 const digits = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
 function node(tag, text, cls) {
@@ -43,7 +43,13 @@ function drawPage() {
     if(i===pageStarts[page] || v.number===1) sheet.appendChild(node('h2',v.chapter.name));
     if((i<origin && checked.has(v.ref)) || (i>=origin && i<(preview ?? cursor))) sheet.appendChild(document.createTextNode(v.text+' '));
     else {
-      for(const forms of wordKeys(v.text)){
+      const words=v.text.split(/\s+/).filter(word=>speechKey(word));
+      for(const [position,word] of words.entries()){
+        if(mistake && mistake.ref===v.ref && position===mistake.position){
+          sheet.append(node('mark',word,'missedWord'),' ');
+          continue;
+        }
+        const forms=spellings(word);
         const blank=node('span','', 'blank '+(forms[0].length<3?'short':forms[0].length<5?'medium':'long'));
         blank.setAttribute('aria-hidden','true'); sheet.append(blank,' ');
       }
@@ -57,6 +63,7 @@ function drawPage() {
   el('recite').textContent=pending?(finishing?'Finishing…':'Finish'):cursor===end?'Practice this page again':cursor>pageStarts[page]?'Resume recitation':'Recite & check';
 }
 function openPage(number, restart=false, surahStart=null){
+  stopRecitationAudio();
   cancelCapture();quest=null;
   page=number; pending=null; end=pageStarts[page+1] || verses.length;
   origin=restart ? pageStarts[page] : Number(localStorage.getItem('pageOrigin.'+page) || pageStarts[page]);
@@ -69,6 +76,7 @@ function openPage(number, restart=false, surahStart=null){
 }
 function cancelCapture(){
   if(pending) Practice.cancel(pending);
+  mistake=null;el('wordAlert').hidden=true;
   feedback='';lastHeard='';el('heardDetail').hidden=true;el('heard').textContent='';
   pending=null; preview=null; fragment=''; finishing=false;
   document.body.classList.remove('listening');
@@ -136,6 +144,18 @@ window.voiceEvent=(key,type,value)=>{
       localStorage.setItem('mushafPage',page);
     }
   }
+  if(type==='final'){
+    const previousMistake=mistake;
+    mistake=null;
+    if(scan.mismatch && cursor<end){
+      const position=firstDifferentWord(verses[cursor],scan.tail);
+      mistake={ref:verses[cursor].ref,position};
+      const word=verses[cursor].text.split(/\s+/).filter(w=>speechKey(w))[position];
+      el('wordAlert').textContent='Check '+mistake.ref+(word?' · word '+(position+1)+' · '+word:' · the recognized phrase differed');
+      if(!previousMistake || previousMistake.ref!==mistake.ref || previousMistake.position!==position) Practice.mistakePulse?.();
+    }
+    el('wordAlert').hidden=!mistake;
+  }
   drawPage();
   if(type==='final'){
     if(scan.mismatch && cursor<end){
@@ -153,6 +173,7 @@ window.voiceEvent=(key,type,value)=>{
   if(cursor===verses.length && type==='final'){cancelCapture();drawPage();el('result').textContent='Recitation complete.';}
 };
 function section(practice){
+  stopRecitationAudio();
   quest=null;el('planner').hidden=true;el('planTab').setAttribute('aria-pressed',false);el('adventure').hidden=true;el('gardenTab').setAttribute('aria-pressed',false);
   cancelCapture();drawPage();el('practice').hidden=!practice;el('progress').hidden=practice;
   el('practiceTab').setAttribute('aria-pressed',practice);el('progressTab').setAttribute('aria-pressed',!practice);
@@ -175,9 +196,11 @@ el('ayah').onchange=e=>{
 el('page').onchange=e=>openPage(Number(e.target.value));
 el('prev').onclick=()=>openPage(page-1);el('next').onclick=()=>openPage(page+1);
 el('recite').onclick=()=>{
+  stopRecitationAudio();
   if(pending){finishing=true;drawPage();Practice.finish(pending);return;}
   if(cursor===end){openPage(page,true);return;}
   pending=String(++sequence)+'/'+verses[cursor].ref;fragment='';preview=null;document.body.classList.add('listening');drawPage();el('result').textContent='Starting microphone…';Practice.listen(pending);
 };
 el('practiceTab').onclick=()=>section(true);el('progressTab').onclick=()=>section(false);
+initRecitationAudio();
 openPage(page);section(true);

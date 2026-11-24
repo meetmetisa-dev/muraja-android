@@ -34,12 +34,16 @@ public class PracticeActivity extends Activity {
         });
         page.getSettings().setJavaScriptEnabled(true);
         page.getSettings().setDomStorageEnabled(true);
+        page.getSettings().setMediaPlaybackRequiresUserGesture(false);
         page.getSettings().setAllowContentAccess(false);
         page.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { return true; }
         });
         page.addJavascriptInterface(this, "Practice");
         page.loadUrl("file:///android_asset/index.html");
+    }
+    @JavascriptInterface public void mistakePulse() {
+        runOnUiThread(() -> page.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS));
     }
     @JavascriptInterface public String chapters() {
         try (java.io.InputStream input = getAssets().open("quran.json");
@@ -187,6 +191,7 @@ public class PracticeActivity extends Activity {
         releaseRecognizer();
     }
     @Override protected void onStop() {
+        page.evaluateJavascript("window.stopRecitationAudio && window.stopRecitationAudio()", null);
         if (recognizer != null || pendingKey != null && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
             endSession("Recording stopped.");
         super.onStop();

@@ -94,3 +94,28 @@ function matchSegment(verses, cursor, fragment, hypotheses, history) {
   }
   return best;
 }
+
+// Locate the first differing reference word using the same normalized spellings
+// as the matcher. If a spelling cannot be mapped safely, flag the ayah only.
+function firstDifferentWord(verse, remainder){
+  const original=verse.text.split(/\s+/).filter(w=>speechKey(w));
+  let longest=-1, position=-1;
+  for(const variant of references(verse)){
+    let common=0;
+    while(common<variant.length && common<remainder.length && variant[common]===remainder[common])common++;
+    if(common<=longest)continue;
+    longest=common;position=-1;
+    for(const text of [verse.text,conventional[verse.ref] || verse.text]){
+      const words=text.split(/\s+/).map(speechKey).filter(Boolean);
+      if(words.length!==original.length || !variant.endsWith(words.join('')))continue;
+      let offset=variant.length-words.join('').length;
+      if(common<offset)break;
+      for(let i=0;i<words.length;i++){
+        offset+=words[i].length;
+        if(common<offset){position=i;break;}
+      }
+      break;
+    }
+  }
+  return position;
+}

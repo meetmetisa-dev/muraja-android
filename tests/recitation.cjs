@@ -11,7 +11,7 @@ const context = vm.createContext({
   localStorage:{getItem:k=>storage.get(k), setItem:(k,v)=>storage.set(k,String(v))},
   Option:Element, Practice:{chapters:()=>fs.readFileSync('assets/quran.json','utf8'),cancel(){},listen(){},finish(){}}
 });
-for(const file of ['spellings','pages','match','app','garden','atlas']){
+for(const file of ['spellings','pages','match','audio','app','garden','atlas']){
   vm.runInContext(fs.readFileSync('assets/'+file+'.js','utf8'),context);
 }
 vm.runInContext(`
@@ -106,3 +106,33 @@ for(let i=0;i<30;i++){
 el('surah').onchange({target:{value:'114'}});el('ayah').onchange({target:{value:'6'}});assert.equal(cursor,6235);
 `,context);
 console.log('First-use planning, arbitrary ayah starts, and all 30 playable map regions passed.');
+
+vm.runInContext(`
+openPage(0,true);el('recite').onclick();
+window.voiceEvent(pending,'partial','بسم الله العزيز الرحيم');assert.equal(mistake,null);
+window.voiceEvent(pending,'final','بسم الله العزيز الرحيم');assert.equal(mistake.position,2);
+assert.equal(el('wordAlert').hidden,false);assert.equal(cursor,0);
+window.voiceEvent(pending,'final','بسم الله الرحمن الرحيم');assert.equal(mistake,null);
+assert.equal(cursor,1);
+`,context);
+
+const played=[];
+class TestAudio {
+  play(){played.push(this.src.split('/').pop());return Promise.resolve();}
+  pause(){} removeAttribute(){} load(){}
+}
+context.Audio=TestAudio;context.played=played;
+vm.runInContext(`
+el('surah').onchange({target:{value:'112'}});el('ayah').onchange({target:{value:'2'}});
+el('audioScope').value='ayah';el('playCount').value='3';el('playReference').onclick();
+for(let i=0;i<3;i++)activeAudio.onended();
+assert.equal(played.join(','),'112002.mp3,112002.mp3,112002.mp3');assert.equal(activeAudio,null);
+played.length=0;el('audioScope').value='surah';el('playCount').value='2';el('playReference').onclick();
+for(let i=0;i<8;i++)activeAudio.onended();
+assert.equal(played.join(','),'112001.mp3,112002.mp3,112003.mp3,112004.mp3,112001.mp3,112002.mp3,112003.mp3,112004.mp3');
+assert.equal(activeAudio,null);
+el('playReference').onclick();el('recite').onclick();assert.equal(activeAudio,null);assert(pending);
+el('playReference').onclick();assert.equal(pending,null);assert(activeAudio);
+activeAudio.onerror();assert.equal(activeAudio,null);assert(el('audioStatus').textContent.includes('unavailable'));
+`,context);
+console.log('Red word feedback, ayah and surah repeat counts, stop and microphone handoff passed.');
