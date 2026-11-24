@@ -12,6 +12,7 @@ const [oldS,oldA] = JSON.parse(localStorage.getItem('position') || '[0,0]');
 const oldIndex = verses.findIndex(v => v.ref===(oldS+1)+':'+(oldA+1));
 let page = Number(localStorage.getItem('mushafPage') || pageFor(Math.max(0,oldIndex)));
 if (!Number.isInteger(page) || page<0 || page>=604) page=0;
+let quest=null;
 let cursor, end, sequence=0, pending=null;
 let feedback='', lastHeard='';
 let origin, preview=null, fragment="", finishing=false;
@@ -43,11 +44,12 @@ function drawPage() {
   }
   el('prev').disabled=page===0; el('next').disabled=page===603;
   el('target').textContent=cursor===end?'Page complete': 'Recite '+verses[cursor].chapter.transliteration+' · ayah '+verses[cursor].number;
+  if(quest && cursor<quest.end) el('target').textContent+=' · garden goal ends at '+verses[quest.end-1].number;
   el('recite').disabled=finishing;
   el('recite').textContent=pending?(finishing?'Finishing…':'Finish'):cursor===end?'Practice this page again':cursor>pageStarts[page]?'Resume recitation':'Recite & check';
 }
 function openPage(number, restart=false, surahStart=null){
-  cancelCapture();
+  cancelCapture();quest=null;
   page=number; pending=null; end=pageStarts[page+1] || verses.length;
   origin=restart ? pageStarts[page] : Number(localStorage.getItem('pageOrigin.'+page) || pageStarts[page]);
   const saved=Number(localStorage.getItem('pageCursor.'+page) || pageStarts[page]);
@@ -79,6 +81,7 @@ window.voiceEvent=(key,type,value)=>{
     .map(v=>conventional[v.ref] || v.text).join(' ').split(/\s+/).map(speechKey).join(' ');
   const scan=matchSegment(verses,cursor,fragment,alternatives,history);
   if(!scan) return;
+  if(quest) scan.index=Math.min(scan.index,quest.end);
   preview=scan.index;
   if(type==='final'){
     while(cursor<scan.index){
@@ -92,6 +95,12 @@ window.voiceEvent=(key,type,value)=>{
     }
     localStorage.setItem('checkedAyahs',JSON.stringify([...checked]));
     fragment=scan.mismatch?'':scan.tail;preview=null;
+    if(quest && cursor===quest.end){
+      const chapter=quest.chapter, state=gardenState(chapter);
+      gardenMap();
+      el('gardenTotal').textContent=chapter.transliteration+(state.matched===state.total?' · garden fully grown. ':' · goal complete. ')+state.matched+' / '+state.total+' ayahs matched.';
+      return;
+    }
     if(cursor===end && page<603){
       page++;origin=cursor;end=pageStarts[page+1] || verses.length;
       localStorage.setItem('pageOrigin.'+page,origin);localStorage.setItem('pageCursor.'+page,cursor);
@@ -115,6 +124,7 @@ window.voiceEvent=(key,type,value)=>{
   if(cursor===verses.length && type==='final'){cancelCapture();drawPage();el('result').textContent='Recitation complete.';}
 };
 function section(practice){
+  quest=null;el('adventure').hidden=true;el('gardenTab').setAttribute('aria-pressed',false);
   cancelCapture();drawPage();el('practice').hidden=!practice;el('progress').hidden=practice;
   el('practiceTab').setAttribute('aria-pressed',practice);el('progressTab').setAttribute('aria-pressed',!practice);
   if(practice) return;

@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const nodes = {}, storage = new Map();
-class Element { setAttribute() {} append() {} appendChild() {} add() {} }
+class Element { setAttribute() {} append() {} appendChild() {} scrollIntoView() {} add() {} }
 const context = vm.createContext({
   assert, window:{}, document:{
     body:{classList:{remove(){},add(){}}}, getElementById:id=>nodes[id] ||= new Element(),
@@ -11,7 +11,7 @@ const context = vm.createContext({
   localStorage:{getItem:k=>storage.get(k), setItem:(k,v)=>storage.set(k,String(v))},
   Option:Element, Practice:{chapters:()=>fs.readFileSync('assets/quran.json','utf8'),cancel(){},listen(){},finish(){}}
 });
-for(const file of ['spellings','pages','match','app']){
+for(const file of ['spellings','pages','match','app','garden']){
   vm.runInContext(fs.readFileSync('assets/'+file+'.js','utf8'),context);
 }
 vm.runInContext(`
@@ -60,3 +60,15 @@ assert.equal(page,603);assert.equal(cursor,6236);assert.equal(pending,null);
 assert.equal(el('result').textContent,'Recitation complete.');
 `,context);
 console.log('Passed overlap, alternative transcript, split word group and 6,236 consecutive ayah callbacks.');
+
+vm.runInContext(`
+checked.clear();gardenMap();selectGarden(chapters[0]);el('beginQuest').onclick();el('recite').onclick();
+window.voiceEvent(pending,'partial',verses[0].text);assert.equal(gardenState(chapters[0]).matched,0);
+window.voiceEvent(pending,'final','خطأ');assert.equal(gardenState(chapters[0]).matched,0);
+window.voiceEvent(pending,'final',verses.slice(0,7).map(v=>v.text).join(' '));
+assert.equal(gardenState(chapters[0]).matched,5);assert.equal(pending,null);assert.equal(quest,null);
+selectGarden(chapters[0]);el('beginQuest').onclick();el('recite').onclick();
+window.voiceEvent(pending,'final',verses.slice(5,9).map(v=>v.text).join(' '));
+assert.equal(gardenState(chapters[0]).matched,7);assert.equal(gardenState(chapters[1]).matched,0);
+`,context);
+console.log('Adventure progression passed.');
