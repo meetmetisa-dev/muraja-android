@@ -33,7 +33,7 @@ function drawPage() {
   for(let i=pageStarts[page];i<end;i++){
     const v=verses[i];
     if(i===pageStarts[page] || v.number===1) sheet.appendChild(node('h2',v.chapter.name));
-    if(i>=origin && i<(preview ?? cursor)) sheet.appendChild(document.createTextNode(v.text+' '));
+    if((i<origin && checked.has(v.ref)) || (i>=origin && i<(preview ?? cursor))) sheet.appendChild(document.createTextNode(v.text+' '));
     else {
       for(const forms of wordKeys(v.text)){
         const blank=node('span','', 'blank '+(forms[0].length<3?'short':forms[0].length<5?'medium':'long'));
@@ -44,7 +44,7 @@ function drawPage() {
   }
   el('prev').disabled=page===0; el('next').disabled=page===603;
   el('target').textContent=cursor===end?'Page complete': 'Recite '+verses[cursor].chapter.transliteration+' · ayah '+verses[cursor].number;
-  if(quest && cursor<quest.end) el('target').textContent+=' · garden goal ends at '+verses[quest.end-1].number;
+  if(quest && cursor<quest.end) el('target').textContent+=' · goal ends at '+verses[quest.end-1].ref;
   el('recite').disabled=finishing;
   el('recite').textContent=pending?(finishing?'Finishing…':'Finish'):cursor===end?'Practice this page again':cursor>pageStarts[page]?'Resume recitation':'Recite & check';
 }
@@ -84,17 +84,30 @@ window.voiceEvent=(key,type,value)=>{
   if(quest) scan.index=Math.min(scan.index,quest.end);
   preview=scan.index;
   if(type==='final'){
+    const newlyCompleted=new Set();
     while(cursor<scan.index){
       if(cursor===end){
         page++; origin=cursor; end=pageStarts[page+1] || verses.length;
         localStorage.setItem('pageOrigin.'+page,origin);
         localStorage.setItem('mushafPage',page);
       }
-      checked.add(verses[cursor++].ref);
+      const matched=verses[cursor++];
+      if(!checked.has(matched.ref)){
+        checked.add(matched.ref);
+        newlyCompleted.add(Math.floor((matched.chapter.id-1)/10));
+      }
       localStorage.setItem('pageCursor.'+page,cursor);
     }
     localStorage.setItem('checkedAyahs',JSON.stringify([...checked]));
     fragment=scan.mismatch?'':scan.tail;preview=null;
+    if(quest && quest.review) localStorage.setItem('reviewCursor.'+quest.pace,cursor);
+    const transition=(quest || checked.size===verses.length) && journeyTransition(newlyCompleted);
+    if(quest && quest.review && cursor===quest.end){
+      completeAssignment(quest);gardenMap();return;
+    }
+    if(transition){
+      gardenMap();return;
+    }
     if(quest && cursor===quest.end){
       const chapter=quest.chapter, state=gardenState(chapter);
       gardenMap();

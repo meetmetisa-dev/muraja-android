@@ -57,7 +57,7 @@ for(let i=0;i<verses.length;i++){
   if(i+1<verses.length) assert.equal(pending,wholeSession);
 }
 assert.equal(page,603);assert.equal(cursor,6236);assert.equal(pending,null);
-assert.equal(el('result').textContent,'Recitation complete.');
+assert.equal(el('harvest').hidden,false);
 `,context);
 console.log('Passed overlap, alternative transcript, split word group and 6,236 consecutive ayah callbacks.');
 
@@ -72,3 +72,21 @@ window.voiceEvent(pending,'final',verses.slice(5,9).map(v=>v.text).join(' '));
 assert.equal(gardenState(chapters[0]).matched,7);assert.equal(gardenState(chapters[1]).matched,0);
 `,context);
 console.log('Adventure progression passed.');
+vm.runInContext(`
+checked.clear();for(const v of verses) checked.add(v.ref);
+for(const pace of [60,30,10]){
+ let index=0;
+ for(let s=0;s<pace;s++){const plan=assignment(pace,s);assert.equal(plan.start,index);assert(plan.end>plan.start);index=plan.end;}
+ assert.equal(index,verses.length);
+}
+assert(entireQuranDone());checked.delete('114:5');assert(!entireQuranDone());
+checked.delete('1:7');el('region').value=0;gardenMap();selectGarden(chapters[0]);
+el('beginQuest').onclick();el('recite').onclick();window.voiceEvent(pending,'final',verses[6].text);
+assert.equal(el('travel').hidden,false);el('travel').onclick();assert.equal(Number(el('region').value),11);
+el('beginQuest').onclick();el('recite').onclick();window.voiceEvent(pending,'final',verses[verses.length-2].text);
+assert.equal(el('harvest').hidden,false);
+el('pace').value='60';el('pace').onchange();el('reviewStart').onclick();assert(quest.review);
+el('recite').onclick();window.voiceEvent(pending,'final',verses[0].text);
+assert.equal(localStorage.getItem('reviewCursor.60'),'1');
+`,context);
+console.log('Travel, full completion and three review cycles passed.');
