@@ -2,7 +2,8 @@ package id.muraja.practice;
 
 import android.app.Activity;
 import android.Manifest;
-import android.app.AlertDialog;
+import android.os.Handler;
+import android.os.Looper;
 import android.content.pm.PackageManager;
 import android.speech.RecognitionListener;
 import android.speech.SpeechRecognizer;
@@ -18,7 +19,9 @@ public class PracticeActivity extends Activity {
     private WebView page;
     private String pendingKey;
     private SpeechRecognizer recognizer;
-    private AlertDialog recording;
+    private final Handler callbacks = new Handler(Looper.getMainLooper());
+    private boolean finishing;
+    private int busyRetries;
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
 
@@ -50,6 +53,8 @@ public class PracticeActivity extends Activity {
         runOnUiThread(() -> {
             if (pendingKey != null) return;
             pendingKey = key;
+            finishing = false;
+            busyRetries = 0;
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                 startVoice();
             } else {
@@ -62,50 +67,51 @@ public class PracticeActivity extends Activity {
         super.onRequestPermissionsResult(code, permissions, results);
         if (code != 7 || pendingKey == null) return;
         if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) startVoice();
-        else finishVoice("", "Microphone access is off. Open Settings → Apps → Muraja Voice → Permissions → Microphone.");
+        else endSession("Microphone access is off. Open Settings → Apps → Muraja Voice → Permissions → Microphone.");
     }
 
     private void startVoice() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            finishVoice("", "No speech service is available. Enable an Android speech recognition service and try again.");
+            endSession("No speech service is available. Enable an Android speech recognition service and try again.");
             return;
         }
         try {
             recognizer = SpeechRecognizer.createSpeechRecognizer(this);
             final SpeechRecognizer session = recognizer;
-            recording = new AlertDialog.Builder(this).setTitle("Recite in Arabic")
-                .setMessage("Starting microphone…")
-                .setNegativeButton("Cancel", (dialog, which) -> finishVoice("", "Recording cancelled."))
-                .setPositiveButton("Finish", null).create();
-            recording.setOnCancelListener(dialog -> finishVoice("", "Recording cancelled."));
-            recording.show();
-            recording.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
-                session.stopListening();
-                view.setEnabled(false);
-                recording.setMessage("Checking your words…");
-            });
             session.setRecognitionListener(new RecognitionListener() {
-                public void onReadyForSpeech(Bundle params) { if (recognizer == session) recording.setMessage("Listening. Recite the selected ayah."); }
-                public void onEndOfSpeech() { if (recognizer == session) recording.setMessage("Checking your words…"); }
-                public void onError(int code) { if (recognizer == session) finishVoice("", errorMessage(code)); }
+                public void onReadyForSpeech(Bundle params) {
+                    if (recognizer == session) send("status", "Listening…");
+                }
+                public void onEndOfSpeech() {}
+                public void onError(int code) {
+                    if (recognizer != session) return;
+                    if (finishing) { endSession("Finished."); return; }
+                    if (code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                        restart(250);
+                    } else if (code == SpeechRecognizer.ERROR_RECOGNIZER_BUSY && ++busyRetries <= 3) {
+                        restart(300L * busyRetries);
+                    } else endSession(errorMessage(code));
+                }
                 public void onResults(Bundle results) {
                     if (recognizer != session) return;
-                    ArrayList<String> words = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                    if (words == null || words.isEmpty()) finishVoice("", "No words were recognized. Try again.");
-                    else finishVoice(words.get(0), "");
+                    deliver("final", results);
+                    busyRetries = 0;
+                    if (finishing) endSession("Finished.");
+                    else restart(120);
                 }
                 public void onBeginningOfSpeech() {}
                 public void onRmsChanged(float rms) {}
                 public void onBufferReceived(byte[] buffer) {}
-                public void onPartialResults(Bundle results) {}
+                public void onPartialResults(Bundle results) { if (recognizer == session) deliver("partial", results); }
                 public void onEvent(int type, Bundle params) {}
             });
             Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
             intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
             intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-SA");
+            intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
             session.startListening(intent);
         } catch (RuntimeException ex) {
-            finishVoice("", "The speech service could not start. Check your selected speech service and microphone permission.");
+            endSession("The speech service could not start. Check your selected speech service and microphone permission.");
         }
     }
 
@@ -123,28 +129,58 @@ public class PracticeActivity extends Activity {
         }
     }
 
-    private void releaseVoice() {
+    private void deliver(String type, Bundle result) {
+        ArrayList<String> words = result == null ? null : result.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+        if (words != null && !words.isEmpty()) send(type, words.get(0));
+        else if ("final".equals(type)) send("reset", "");
+    }
+
+    private void send(String type, String value) {
+        if (pendingKey == null) return;
+        String args = JSONObject.quote(pendingKey) + "," + JSONObject.quote(type) + "," + JSONObject.quote(value);
+        page.evaluateJavascript("window.voiceEvent && voiceEvent(" + args + ")", null);
+    }
+
+    private void releaseRecognizer() {
         SpeechRecognizer old = recognizer;
         recognizer = null;
         if (old != null) old.destroy();
-        if (recording != null) { recording.dismiss(); recording = null; }
     }
 
-    private void finishVoice(String words, String message) {
-        String key = pendingKey;
+    private void restart(long delay) {
+        releaseRecognizer();
+        send("reset", "");
+        callbacks.postDelayed(() -> { if (pendingKey != null && !finishing) startVoice(); }, delay);
+    }
+
+    @JavascriptInterface public void finish(String key) {
+        runOnUiThread(() -> {
+            if (!key.equals(pendingKey) || finishing) return;
+            finishing = true;
+            if (recognizer == null) { endSession("Finished."); return; }
+            recognizer.stopListening();
+            callbacks.postDelayed(() -> endSession("Finished."), 3000);
+        });
+    }
+
+    @JavascriptInterface public void cancel(String key) {
+        runOnUiThread(() -> { if (key.equals(pendingKey)) endSession("Stopped."); });
+    }
+
+    private void endSession(String message) {
+        send("end", message);
         pendingKey = null;
-        releaseVoice();
-        if (key == null) return;
-        String args = JSONObject.quote(key) + "," + JSONObject.quote(words) + "," + JSONObject.quote(message);
-        page.evaluateJavascript("window.voiceResult && voiceResult(" + args + ")", null);
+        finishing = false;
+        callbacks.removeCallbacksAndMessages(null);
+        releaseRecognizer();
     }
     @Override protected void onStop() {
-        if (recognizer != null) finishVoice("", "Recording stopped.");
+        if (recognizer != null || pendingKey != null && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+            endSession("Recording stopped.");
         super.onStop();
     }
-
     @Override protected void onDestroy() {
-        releaseVoice();
+        endSession("Stopped.");
         super.onDestroy();
     }
 }

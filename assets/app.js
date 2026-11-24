@@ -13,6 +13,7 @@ const oldIndex = verses.findIndex(v => v.ref===(oldS+1)+':'+(oldA+1));
 let page = Number(localStorage.getItem('mushafPage') || pageFor(Math.max(0,oldIndex)));
 if (!Number.isInteger(page) || page<0 || page>=604) page=0;
 let cursor, end, sequence=0, pending=null;
+let origin, preview=null, fragment="", finishing=false;
 const digits = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
 function node(tag, text, cls) {
   const item=document.createElement(tag);
@@ -30,7 +31,7 @@ function drawPage() {
   for(let i=pageStarts[page];i<end;i++){
     const v=verses[i];
     if(i===pageStarts[page] || v.number===1) sheet.appendChild(node('h2',v.chapter.name));
-    if(i<cursor) sheet.appendChild(document.createTextNode(v.text+' '));
+    if(i>=origin && i<(preview ?? cursor)) sheet.appendChild(document.createTextNode(v.text+' '));
     else {
       for(const forms of wordKeys(v.text)){
         const blank=node('span','', 'blank '+(forms[0].length<3?'short':forms[0].length<5?'medium':'long'));
@@ -41,30 +42,65 @@ function drawPage() {
   }
   el('prev').disabled=page===0; el('next').disabled=page===603;
   el('target').textContent=cursor===end?'Page complete': 'Recite '+verses[cursor].chapter.transliteration+' · ayah '+verses[cursor].number;
-  el('recite').textContent=cursor===end?'Practice this page again':'Recite & check';
+  el('recite').disabled=finishing;
+  el('recite').textContent=pending?(finishing?'Finishing…':'Finish'):cursor===end?'Practice this page again':'Recite & check';
 }
-function openPage(number, restart=false){
+function openPage(number, restart=false, surahStart=null){
+  cancelCapture();
   page=number; pending=null; end=pageStarts[page+1] || verses.length;
+  origin=restart ? pageStarts[page] : Number(localStorage.getItem('pageOrigin.'+page) || pageStarts[page]);
   const saved=Number(localStorage.getItem('pageCursor.'+page) || pageStarts[page]);
   cursor=restart || !Number.isInteger(saved) || saved<pageStarts[page] || saved>end ? pageStarts[page] : saved;
+  if(surahStart!==null){origin=surahStart;cursor=surahStart;}
+  localStorage.setItem('pageOrigin.'+page,origin);
   localStorage.setItem('pageCursor.'+page,cursor);localStorage.setItem('mushafPage',page);
   el('result').textContent='';drawPage();
 }
-window.voiceResult=(key,words,error)=>{
-  if(key!==pending || cursor>=end) return;
-  pending=null;
-  if(error){el('result').textContent=error;return;}
-  const verse=verses[cursor];
-  if(!matchesAyah(verse.text,words)){
-    el('result').textContent='The recognized words did not match the full ayah. Try the same ayah again.';
-    return;
+function cancelCapture(){
+  if(pending) Practice.cancel(pending);
+  pending=null; preview=null; fragment=''; finishing=false;
+  document.body.classList.remove('listening');
+}
+window.voiceEvent=(key,type,value)=>{
+  if(key!==pending) return;
+  if(type==='end'){
+    cancelCapture();drawPage();el('result').textContent=value;return;
   }
-  checked.add(verse.ref); localStorage.setItem('checkedAyahs',JSON.stringify([...checked]));
-  cursor++; localStorage.setItem('pageCursor.'+page,cursor);drawPage();
-  el('result').textContent='Ayah '+verse.number+' matched.';
+  if(type==='reset'){preview=null;drawPage();return;}
+  if(type==='status'){el('result').textContent=value;return;}
+  const heard=speechKey(value);
+  if(!heard) return;
+  let scan=scanSpeech(verses,cursor,fragment+heard);
+  // A reader may restart a long ayah from the beginning after pausing.
+  if(fragment && scan.mismatch && scan.index===cursor){
+    const retry=scanSpeech(verses,cursor,heard);
+    if(!retry.mismatch || retry.index>cursor) scan=retry;
+  }
+  preview=scan.index;
+  if(type==='final'){
+    while(cursor<scan.index){
+      if(cursor===end){
+        page++; origin=cursor; end=pageStarts[page+1] || verses.length;
+        localStorage.setItem('pageOrigin.'+page,origin);
+        localStorage.setItem('mushafPage',page);
+      }
+      checked.add(verses[cursor++].ref);
+      localStorage.setItem('pageCursor.'+page,cursor);
+    }
+    localStorage.setItem('checkedAyahs',JSON.stringify([...checked]));
+    fragment=scan.mismatch?'':scan.tail;preview=null;
+    if(cursor===end && page<603){
+      page++;origin=cursor;end=pageStarts[page+1] || verses.length;
+      localStorage.setItem('pageOrigin.'+page,origin);localStorage.setItem('pageCursor.'+page,cursor);
+      localStorage.setItem('mushafPage',page);
+    }
+  }
+  drawPage();
+  el('result').textContent=scan.mismatch?'Words differed. Repeat the current ayah.':'Listening…';
+  if(cursor===verses.length && type==='final'){cancelCapture();drawPage();el('result').textContent='Recitation complete.';}
 };
 function section(practice){
-  pending=null;el('practice').hidden=!practice;el('progress').hidden=practice;
+  cancelCapture();drawPage();el('practice').hidden=!practice;el('progress').hidden=practice;
   el('practiceTab').setAttribute('aria-pressed',practice);el('progressTab').setAttribute('aria-pressed',!practice);
   if(practice) return;
   el('total').textContent=checked.size+' of 6,236 ayahs matched.'+(legacy.size?' Previously marked as practiced: '+legacy.size+'.':'');
@@ -77,12 +113,13 @@ function section(practice){
 }
 chapters.forEach(c=>el('surah').add(new Option(c.id+'. '+c.transliteration,c.id)));
 pageStarts.forEach((_,i)=>el('page').add(new Option(i+1,i)));
-el('surah').onchange=e=>openPage(pageFor(verses.findIndex(v=>v.chapter.id===Number(e.target.value))));
+el('surah').onchange=e=>{const index=verses.findIndex(v=>v.chapter.id===Number(e.target.value));openPage(pageFor(index),false,index);};
 el('page').onchange=e=>openPage(Number(e.target.value));
 el('prev').onclick=()=>openPage(page-1);el('next').onclick=()=>openPage(page+1);
 el('recite').onclick=()=>{
+  if(pending){finishing=true;drawPage();Practice.finish(pending);return;}
   if(cursor===end){openPage(page,true);return;}
-  pending=String(++sequence)+'/'+verses[cursor].ref;Practice.listen(pending);
+  pending=String(++sequence)+'/'+verses[cursor].ref;fragment='';preview=null;document.body.classList.add('listening');drawPage();el('result').textContent='Starting microphone…';Practice.listen(pending);
 };
 el('practiceTab').onclick=()=>section(true);el('progressTab').onclick=()=>section(false);
-section(true);openPage(page);
+openPage(page);section(true);
