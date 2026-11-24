@@ -16,5 +16,5 @@ fi
 "$tools/d8" --lib "$platform" --min-api 26 --output "$out/dex" "$out/classes"/id/muraja/practice/*.class
 (cd "$out/dex" && zip -q "$out/app.apk" classes.dex)
 "$tools/zipalign" -f 4 "$out/app.apk" "$out/aligned.apk"
-"$tools/apksigner" sign --ks "${KEYSTORE:?Set KEYSTORE}" --ks-pass env:STORE_PASS --out dist/Muraja-Voice-1.4.apk "$out/aligned.apk"
-"$tools/apksigner" verify --verbose dist/Muraja-Voice-1.4.apk
+"$tools/apksigner" sign --ks "${KEYSTORE:?Set KEYSTORE}" --ks-pass env:STORE_PASS --out dist/Muraja-Voice-1.5.apk "$out/aligned.apk"
+"$tools/apksigner" verify --verbose dist/Muraja-Voice-1.5.apk

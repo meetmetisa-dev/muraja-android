@@ -100,7 +100,13 @@ window.voiceEvent=(key,type,value)=>{
   }
   drawPage();
   if(type==='final'){
-    feedback=scan.mismatch && cursor<end?'Still listening. Repeat ayah '+verses[cursor].ref+'.':'';
+    if(scan.mismatch && cursor<end){
+      feedback='Still listening. Repeat ayah '+verses[cursor].ref+'.';
+    } else if(fragment && cursor<end){
+      feedback='First part matched. Continue ayah '+verses[cursor].ref+' from where you paused.';
+    } else {
+      feedback='';
+    }
     lastHeard=scan.mismatch?scan.transcript:'';
     el('heard').textContent=lastHeard;
     el('heardDetail').hidden=!lastHeard;

@@ -40,6 +40,15 @@ assert.equal(cursor,4);
 window.voiceEvent(pending,'final',['مالك يوم الدين','إياك خطأ']);
 assert.equal(cursor,4);
 openPage(0,true);el('recite').onclick();
+el('surah').onchange({target:{value:'67'}});el('recite').onclick();
+window.voiceEvent(pending,'final',verses[cursor].text);
+const mulkTwo=cursor;
+window.voiceEvent(pending,'final','الذي خلق الموت والحياه ليبلوكم ايكم احسن عملا');
+assert.equal(cursor,mulkTwo);assert(fragment);assert(feedback.includes('First part matched'));
+window.voiceEvent(pending,'final','وهو العزيز الغفور');assert.equal(verses[cursor].ref,'67:3');
+assert.equal(speechKey('وجه'), 'وجه');
+assert.notEqual(speechKey('عبده'),speechKey('عبدة'));
+openPage(0,true);el('recite').onclick();
 const wholeSession=pending;
 for(let i=0;i<verses.length;i++){
   const text=conventional[verses[i].ref] || verses[i].text;

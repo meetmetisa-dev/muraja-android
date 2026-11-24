@@ -16,7 +16,10 @@ function matchesAyah(reference, heard) {
 
 // Recognizers may separate clitics or join them. Compare the letters in sequence.
 function speechKey(text) {
-  return wordKeys(text).map(forms=>forms[0].replace(/^((?:و|ف)?(?:ب)?ال)رحمان$/, '$1رحمن')).join('');
+  return wordKeys(text).map(([word]) => word
+    .replace(/^((?:و|ف)?(?:ب)?ال)رحمان$/, '$1رحمن')
+    .replace(/^((?:و|ف)?(?:ب)?ال)حياه$/, '$1حياة')
+  ).join('');
 }
 const openingLetters = {
   '2:1':'الم','3:1':'الم','7:1':'المص','10:1':'الر','11:1':'الر','12:1':'الر','13:1':'المر',
