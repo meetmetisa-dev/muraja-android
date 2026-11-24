@@ -13,6 +13,7 @@ import android.speech.RecognizerIntent;
 
 import android.webkit.*;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import java.util.ArrayList;
 
 public class PracticeActivity extends Activity {
@@ -82,7 +83,13 @@ public class PracticeActivity extends Activity {
                 public void onReadyForSpeech(Bundle params) {
                     if (recognizer == session) send("status", "Listening…");
                 }
-                public void onEndOfSpeech() {}
+                public void onEndOfSpeech() {
+                    callbacks.postDelayed(() -> {
+                        if (recognizer != session || finishing) return;
+                        restart(150);
+                        send("status", "No final transcript arrived. Repeat the current ayah.");
+                    }, 6000);
+                }
                 public void onError(int code) {
                     if (recognizer != session) return;
                     if (finishing) { endSession("Finished."); return; }
@@ -109,6 +116,7 @@ public class PracticeActivity extends Activity {
             intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
             intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-SA");
             intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+            intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5);
             session.startListening(intent);
         } catch (RuntimeException ex) {
             endSession("The speech service could not start. Check your selected speech service and microphone permission.");
@@ -131,13 +139,17 @@ public class PracticeActivity extends Activity {
 
     private void deliver(String type, Bundle result) {
         ArrayList<String> words = result == null ? null : result.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-        if (words != null && !words.isEmpty()) send(type, words.get(0));
+        if (words != null && !words.isEmpty()) dispatch(type, new JSONArray(words).toString());
         else if ("final".equals(type)) send("reset", "");
     }
 
     private void send(String type, String value) {
+        dispatch(type, JSONObject.quote(value));
+    }
+
+    private void dispatch(String type, String jsonValue) {
         if (pendingKey == null) return;
-        String args = JSONObject.quote(pendingKey) + "," + JSONObject.quote(type) + "," + JSONObject.quote(value);
+        String args = JSONObject.quote(pendingKey) + "," + JSONObject.quote(type) + "," + jsonValue;
         page.evaluateJavascript("window.voiceEvent && voiceEvent(" + args + ")", null);
     }
 

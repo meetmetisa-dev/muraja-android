@@ -13,6 +13,7 @@ const oldIndex = verses.findIndex(v => v.ref===(oldS+1)+':'+(oldA+1));
 let page = Number(localStorage.getItem('mushafPage') || pageFor(Math.max(0,oldIndex)));
 if (!Number.isInteger(page) || page<0 || page>=604) page=0;
 let cursor, end, sequence=0, pending=null;
+let feedback='', lastHeard='';
 let origin, preview=null, fragment="", finishing=false;
 const digits = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
 function node(tag, text, cls) {
@@ -43,7 +44,7 @@ function drawPage() {
   el('prev').disabled=page===0; el('next').disabled=page===603;
   el('target').textContent=cursor===end?'Page complete': 'Recite '+verses[cursor].chapter.transliteration+' · ayah '+verses[cursor].number;
   el('recite').disabled=finishing;
-  el('recite').textContent=pending?(finishing?'Finishing…':'Finish'):cursor===end?'Practice this page again':'Recite & check';
+  el('recite').textContent=pending?(finishing?'Finishing…':'Finish'):cursor===end?'Practice this page again':cursor>pageStarts[page]?'Resume recitation':'Recite & check';
 }
 function openPage(number, restart=false, surahStart=null){
   cancelCapture();
@@ -58,24 +59,26 @@ function openPage(number, restart=false, surahStart=null){
 }
 function cancelCapture(){
   if(pending) Practice.cancel(pending);
+  feedback='';lastHeard='';el('heardDetail').hidden=true;el('heard').textContent='';
   pending=null; preview=null; fragment=''; finishing=false;
   document.body.classList.remove('listening');
 }
 window.voiceEvent=(key,type,value)=>{
   if(key!==pending) return;
   if(type==='end'){
-    cancelCapture();drawPage();el('result').textContent=value;return;
+    cancelCapture();drawPage();
+    el('result').textContent=(value==='Finished.'?'Microphone off.':value)+(cursor<end?' Resume at '+verses[cursor].ref+'.':'');
+    return;
   }
   if(type==='reset'){preview=null;drawPage();return;}
-  if(type==='status'){el('result').textContent=value;return;}
-  const heard=speechKey(value);
-  if(!heard) return;
-  let scan=scanSpeech(verses,cursor,fragment+heard);
-  // A reader may restart a long ayah from the beginning after pausing.
-  if(fragment && scan.mismatch && scan.index===cursor){
-    const retry=scanSpeech(verses,cursor,heard);
-    if(!retry.mismatch || retry.index>cursor) scan=retry;
-  }
+  if(type==='status'){el('result').textContent=feedback || value;return;}
+  const alternatives=Array.isArray(value)?value:[value];
+  let previous=cursor;
+  while(previous>0 && cursor-previous<2 && checked.has(verses[previous-1].ref)) previous--;
+  const history=verses.slice(previous,cursor)
+    .map(v=>conventional[v.ref] || v.text).join(' ').split(/\s+/).map(speechKey).join(' ');
+  const scan=matchSegment(verses,cursor,fragment,alternatives,history);
+  if(!scan) return;
   preview=scan.index;
   if(type==='final'){
     while(cursor<scan.index){
@@ -96,7 +99,13 @@ window.voiceEvent=(key,type,value)=>{
     }
   }
   drawPage();
-  el('result').textContent=scan.mismatch?'Words differed. Repeat the current ayah.':'Listening…';
+  if(type==='final'){
+    feedback=scan.mismatch && cursor<end?'Still listening. Repeat ayah '+verses[cursor].ref+'.':'';
+    lastHeard=scan.mismatch?scan.transcript:'';
+    el('heard').textContent=lastHeard;
+    el('heardDetail').hidden=!lastHeard;
+  }
+  el('result').textContent=feedback || 'Listening…';
   if(cursor===verses.length && type==='final'){cancelCapture();drawPage();el('result').textContent='Recitation complete.';}
 };
 function section(practice){

@@ -28,4 +28,26 @@ el('surah').onchange({target:{value:'114'}});assert.equal(verses[cursor].ref,'11
 window.voiceEvent(pending,'final','بسم الله الرحمن الرحيم قل أعوذ برب الناس ملك الناس');assert.equal(verses[cursor].ref,'114:3');
 el('recite').onclick();assert(finishing);window.voiceEvent(pending,'end','Finished.');assert.equal(pending,null);
 `, context);
-console.log('All verse reference and recitation session checks passed.');
+vm.runInContext(`
+openPage(0,true);el('recite').onclick();
+window.voiceEvent(pending,'final',verses[0].text+' '+verses[1].text);
+assert.equal(cursor,2);
+window.voiceEvent(pending,'final',['رب العالمين الرحيم','رب العالمين الرحمان الرحيم']);
+assert.equal(cursor,3);
+window.voiceEvent(pending,'final',['مالك يوم']);
+window.voiceEvent(pending,'final',['يوم الدين']);
+assert.equal(cursor,4);
+window.voiceEvent(pending,'final',['مالك يوم الدين','إياك خطأ']);
+assert.equal(cursor,4);
+openPage(0,true);el('recite').onclick();
+const wholeSession=pending;
+for(let i=0;i<verses.length;i++){
+  const text=conventional[verses[i].ref] || verses[i].text;
+  window.voiceEvent(wholeSession,'final',[text]);
+  assert.equal(cursor,i+1,verses[i].ref);
+  if(i+1<verses.length) assert.equal(pending,wholeSession);
+}
+assert.equal(page,603);assert.equal(cursor,6236);assert.equal(pending,null);
+assert.equal(el('result').textContent,'Recitation complete.');
+`,context);
+console.log('Passed overlap, alternative transcript, split word group and 6,236 consecutive ayah callbacks.');

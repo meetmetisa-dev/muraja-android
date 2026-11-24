@@ -16,7 +16,7 @@ function matchesAyah(reference, heard) {
 
 // Recognizers may separate clitics or join them. Compare the letters in sequence.
 function speechKey(text) {
-  return wordKeys(text).map(forms=>forms[0]).join('');
+  return wordKeys(text).map(forms=>forms[0].replace(/^((?:و|ف)?(?:ب)?ال)رحمان$/, '$1رحمن')).join('');
 }
 const openingLetters = {
   '2:1':'الم','3:1':'الم','7:1':'المص','10:1':'الر','11:1':'الر','12:1':'الر','13:1':'المر',
@@ -52,4 +52,42 @@ function scanSpeech(verses, start, input) {
     index++;rest=rest.slice(match.length);
   }
   return {index,tail:rest,mismatch:!!rest};
+}
+
+// Compare alternative transcripts against the same cursor. Discard a repeated lead-in
+// only if it is an exact suffix of previously matched words at a word boundary.
+function matchSegment(verses, cursor, fragment, hypotheses, history) {
+  let best = null;
+  const suffixes = new Set();
+  let suffix = '';
+  for(const word of history.trim().split(/\s+/).reverse()){
+    suffix=word+suffix;
+    if(suffix) suffixes.add(suffix);
+  }
+  function consider(input, transcript) {
+    const candidate = scanSpeech(verses,cursor,input);
+    const score = [candidate.index, Number(!candidate.mismatch), candidate.mismatch ? 0 : candidate.tail.length];
+    if (!best || score[0]>best.score[0] || (score[0]===best.score[0] &&
+        (score[1]>best.score[1] || (score[1]===best.score[1] && score[2]>best.score[2])))) {
+      best={...candidate,score,transcript};
+    }
+  }
+  for(const transcript of hypotheses) {
+    const words=transcript.trim().split(/\s+/).map(speechKey).filter(Boolean);
+    const heard=words.join('');
+    if(!heard) continue;
+    consider(fragment+heard,transcript);
+    if(fragment) consider(heard,transcript);
+    let prefix='';
+    for(let i=0;i<words.length-1;i++){
+      prefix+=words[i];
+      if(fragment && fragment.endsWith(prefix)) consider(fragment+heard.slice(prefix.length),transcript);
+      if(suffixes.has(prefix)){
+        const rest=heard.slice(prefix.length);
+        consider(fragment+rest,transcript);
+        if(fragment) consider(rest,transcript);
+      }
+    }
+  }
+  return best;
 }
